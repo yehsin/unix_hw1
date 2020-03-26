@@ -5,7 +5,6 @@
 #include "udp6.h"
 
 #include<iostream>
-#include<regex.h>
 #include<ctype.h>
 #include<math.h>
 #include<iomanip>
@@ -18,14 +17,11 @@
 #include<netinet/in.h>
 #include<sys/socket.h>
 #include<sys/stat.h>
-#include<sys/types.h>
-#include<sys/stat.h>
 #include<string.h>
 #include<netdb.h>
 #include<fcntl.h>
-#include<errno.h>
 #include<string.h>
-#include<regex>
+#include<regex.h>
 
 #define BUFFER_SIZE 4048
 using namespace std;
