@@ -31,15 +31,20 @@ class net{
 		char pro[10] ;
 	public:
 		
-		int PID = 0;
+		int PID = -1;
+		char PID_num[BUFFER_SIZE];
 
 		int sl;
 		char Local_address[BUFFER_SIZE];
+
 		char Local_port[BUFFER_SIZE];
 		int  local_port = 0;
+
 		char Rem_address[BUFFER_SIZE];
+
 		char Rem_port[BUFFER_SIZE];
 		int  rem_port = 0;
+
 		char  st[BUFFER_SIZE];
 		char  tx_queue[BUFFER_SIZE];
 		char  rx_queue[BUFFER_SIZE];
@@ -48,8 +53,10 @@ class net{
 		char  retrnsmt[BUFFER_SIZE];
 		char  uid[BUFFER_SIZE];
 		char  timeout[BUFFER_SIZE];
-		int   inode;
 
+		int   inode;
+		char Local[BUFFER_SIZE];
+		char Forigen[BUFFER_SIZE];
 		char pname[BUFFER_SIZE];
 	public:
 		net(char *s) { strcpy(pro,s);};
@@ -83,28 +90,31 @@ class net{
 		virtual void turn_2_add(char *ipv6) = 0;//virtual function
 		
 		void find_pname(){
-			char comm_path[BUFFER_SIZE],cmdline_path[BUFFER_SIZE];
-			char cmd[BUFFER_SIZE] = {'\0'},comm[BUFFER_SIZE],argu[BUFFER_SIZE] = {'\0'};
-			char tmp[BUFFER_SIZE] = {'\0'};
-			FILE *comm_fd,*cmdline_fd;
+			if(PID >0){
 
-			sprintf(comm_path,"/proc/%d/comm",PID);
-			sprintf(cmdline_path,"/proc/%d/cmdline",PID);
+				char comm_path[BUFFER_SIZE],cmdline_path[BUFFER_SIZE];
+				char cmd[BUFFER_SIZE] = {'\0'},comm[BUFFER_SIZE],argu[BUFFER_SIZE] = {'\0'};
+				char tmp[BUFFER_SIZE] = {'\0'};
+				FILE *comm_fd,*cmdline_fd;
 
-			comm_fd = fopen(comm_path,"r");
-			cmdline_fd = fopen(cmdline_path,"r");
-			if(comm_fd != NULL){
-				fgets(comm,sizeof(comm),comm_fd);
-				comm[strlen(comm) -1] = ' ';
+				sprintf(comm_path,"/proc/%d/comm",PID);
+				sprintf(cmdline_path,"/proc/%d/cmdline",PID);
+
+				comm_fd = fopen(comm_path,"r");
+				cmdline_fd = fopen(cmdline_path,"r");
+				if(comm_fd != NULL){
+					fgets(comm,sizeof(comm),comm_fd);
+					comm[strlen(comm) -1] = ' ';
+				}
+				if(cmdline_fd != NULL){
+					fgets(cmd,sizeof(cmd),cmdline_fd);
+					sscanf(cmd,"%*[^ ]%*[ ]%[^\n]",argu);
+				}
+
+				sprintf(pname,"%s %s",comm,argu);
+				fclose(comm_fd);
+				fclose(cmdline_fd);
 			}
-			if(cmdline_fd != NULL){
-				fgets(cmd,sizeof(cmd),cmdline_fd);
-				sscanf(cmd,"%*[^ ]%*[ ]%[^\n]",argu);
-			}
-
-			sprintf(pname,"%s %s",comm,argu);
-			fclose(comm_fd);
-			fclose(cmdline_fd);
 		}
 
 		void find_pid(){
@@ -132,43 +142,41 @@ class net{
 				
 				memset(Buffer,'\0',BUFFER_SIZE);
 				sprintf(Buffer,"/proc/%d/fd/",pid[i]);
-				//cout<<Buffer<<endl;
-				currentfile = opendir(Buffer);
+
+				if(!eaccess(Buffer,R_OK)){
+						
+					currentfile = opendir(Buffer);
 				
-			//	perror("error");
 
+					while(fd = readdir(currentfile)){
+						char str[3000];
+						char link[2048];
+						char link_buffer[2048];
+						sprintf(link,"/proc/%d/fd/%s",pid[i],fd->d_name);
+						sprintf(str,"socket:[%d]",inode);
+						
+						if(!eaccess(link,R_OK)){
 
-				while(fd = readdir(currentfile)){
-					char str[3000];
-					char link[2048];
-					char link_buffer[2048];
-					sprintf(link,"/proc/%d/fd/%s",pid[i],fd->d_name);
-					sprintf(str,"socket:[%d]",inode);
+							struct stat buf;
+							int stmode;
+							stat(link,&buf);
+							if(!S_ISLNK(buf.st_mode)){
+								if(readlink(link,link_buffer,sizeof(link_buffer))!= -1){
+									int lnkbuf_prov = 0;
+									sscanf(link_buffer,"socket:[%d]",&lnkbuf_prov);
+									if(inode == lnkbuf_prov) PID = pid[i];
+								}
+							}
 
-					struct stat buf;
-					int stmode;
-					stat(link,&buf);
-					//stmode = buf.st_mode & IF_LNK;
-					//cout<<buf.st_mode<<" "<<S_IFLNK<<endl;
-					if(!S_ISLNK(buf.st_mode)){
-						if(readlink(link,link_buffer,sizeof(link_buffer))!= -1){
-							int lnkbuf_prov = 0;
-							sscanf(link_buffer,"socket:[%d]",&lnkbuf_prov);
-							if(inode == lnkbuf_prov) PID = pid[i];
-						}
-
+						}		
 					}
+					if(PID >0) sprintf(PID_num,"%d",PID);
+
+					closedir(currentfile);
+					currentfile = nullptr;
 				}
-
-				//if(PID == 0) cout<<"no find"<<endl;
-				//else cout<<PID<<endl;
-
-				closedir(currentfile);
-				currentfile = nullptr;
 									
 			}
-			//cout<<PID;
-
 		}
 
 		void info(){
@@ -177,18 +185,23 @@ class net{
 			turn_2_add(Local_address);
 			turn_2_add(Rem_address);
 			find_pname();
+			if(PID<0){
+				strcpy(PID_num,"-");
+				strcpy(pname,"-");
+			}
+
+			sprintf(Local,"%s:%s",Local_address,Local_port);
+			sprintf(Forigen,"%s:%s",Rem_address,Rem_port);
 		}
 
 
 		virtual void prtOUPUT(){
-			printf("%s %s:%s %s:%s %s %d\n",
+			printf("%-20s %-20s %-20s %s/%s\n",
 					pro,
-					Local_address,
-					Local_port,
-					Rem_address,
-					Rem_port,
-					pname,
-					inode
+					Local,
+					Forigen,
+					PID_num,
+					pname
 					
 			);	
 		}
@@ -346,6 +359,7 @@ class udp6 : public net{
 int main(int argc,char*argv[]){
 	
 	//set getopt
+	int t=0,u=0,print_pro =0;
 	int opt;
         int digit_optind = 0;
         int option_index = 0;
@@ -361,10 +375,20 @@ int main(int argc,char*argv[]){
 		strcat(filter,argv[i]);
 		strcat(filter," ");
 	}
-	cout<<filter<<endl;
 	regex_t reg ;
 	regmatch_t match[1];
 	regcomp(&reg,filter,REG_EXTENDED);
+
+	switch(opt){
+		case 't': 
+			t = opt;
+			break;
+		case 'u':
+			u = opt;
+			break;
+	}
+
+	print_pro =abs( t - u);
 
 
 	vector<string>v; 
@@ -389,10 +413,8 @@ int main(int argc,char*argv[]){
 
 	if(OPENtcp!=NULL){
 		fgets(buffer,BUFFER_SIZE-1,OPENtcp);
-		cout<<buffer<<endl;
 		memset(buffer,'\0',BUFFER_SIZE);
 		while(fgets(buffer,BUFFER_SIZE-1,OPENtcp)!=NULL){
-		//	cout<<buffer<<endl;
 			int num;
 			char proc[10] = "tcp";
 			tcp *TCP = new tcp(proc);
@@ -510,8 +532,10 @@ int main(int argc,char*argv[]){
 	fclose(OPENudp);
 	fclose(OPENudp6);
 
-	cout<<opt<<endl;	
-	switch(opt){
+//	cout<<opt<<endl;
+	printf("%-20s %-20s %-20s %s/%s\n","protocol","Local adress","Foreign address","PID","Process name and argument");
+	
+	switch(print_pro){
 		case 't':{
 				 if(argc >2){
 					for(int i = 2;i<argc;i++){
@@ -561,11 +585,11 @@ int main(int argc,char*argv[]){
                                 }
 
                                 else {
-                                        for(int i = 0;i<T.size();i++){
+                                        for(int i = 0;i<U.size();i++){
                                                 U[i]->info();
                                                 U[i]->prtOUPUT();
                                         }
-                                        for(int i = 0;i<T6.size();i++){
+                                        for(int i = 0;i<U6.size();i++){
                                                 U6[i]->info();
                                                 U6[i]->prtOUPUT();
                                         }
@@ -573,6 +597,35 @@ int main(int argc,char*argv[]){
                                  break;
 
 			 }
+		// nothing
+		case 0:{
+
+			 	for(int i = 0;i<T.size();i++){
+                                  	T[i]->info();
+                                  	T[i]->prtOUPUT();
+                            	}
+
+				for(int i = 0;i<T6.size();i++){
+                                        T6[i]->info();
+                                        T6[i]->prtOUPUT();
+                                }
+
+				for(int i = 0;i<U.size();i++){
+					U[i]->info();
+					U[i]->prtOUPUT();
+				}
+				
+				for(int i = 0;i<U6.size();i++){
+					U6[i]->info();
+					U6[i]->prtOUPUT();
+				}
+
+			}
+
+		// -t -u
+		case 1: break;
+
+
 	}
 
 	return 0;
